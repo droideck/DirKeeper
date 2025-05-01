@@ -6,4 +6,11 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "mcp[cli]>=1.6.0",
+    "lib389",
 ]
+
+[tool.uv]
+no-build-isolation-package = ["lib389"]
+
+[tool.uv.sources]
+lib389 = { path = "../389-ds-base/src/lib389" }
