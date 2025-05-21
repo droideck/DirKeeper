@@ -10,7 +10,5 @@ dependencies = [
 ]
 
 [tool.uv]
-no-build-isolation-package = ["lib389"]
-
-[tool.uv.sources]
-lib389 = { path = "../389-ds-base/src/lib389" }
+index-url = "https://test.pypi.org/simple/"
+extra-index-url = ["https://pypi.org/simple/"]

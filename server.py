@@ -42,7 +42,7 @@ def get_users(filter: Optional[str] = None, basedn: Optional[str] = None):
 
     Args:
         ctx: The MCP context
-        filter: Optional LDAP filter to apply (default: objectClass=person)
+        filter: Optional LDAP filter to apply
         basedn: Optional base DN to search from (default: from context)
 
     Returns:
@@ -55,9 +55,6 @@ def get_users(filter: Optional[str] = None, basedn: Optional[str] = None):
         # Use provided basedn or default from config
         search_basedn = basedn or config['base_dn']
 
-        # Default filter if not provided
-        search_filter = filter or "(objectClass=person)"
-
         # Connect to LDAP
         ds = get_ldap_connection()
 
@@ -65,13 +62,13 @@ def get_users(filter: Optional[str] = None, basedn: Optional[str] = None):
         users = nsUserAccounts(ds, search_basedn)
 
         # Search for users with the given filter
-        user_entries = users.filter(search_filter)
+        user_entries = users.filter(filter)
 
         # Get JSON for each user
         result = []
-        for entry_dn in user_entries:
+        for user in user_entries:
             # Get the user directly in JSON format
-            user_json = users.get(entry_dn, json=True)
+            user_json = user.get_all_attrs_json()
             result.append(json.loads(user_json))
 
         # Close the connection
