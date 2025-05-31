@@ -1,0 +1,227 @@
+name: MCP Server
+
+on:
+  workflow_call:
+  workflow_dispatch:  # Allow manual triggering
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+env:
+  DS_IMAGE: ${{ vars.DS_IMAGE || 'quay.io/389ds/dirsrv' }}
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    env:
+      SHARED: /tmp/workdir/dirkeeper
+    steps:
+      - name: Clone DirKeeper repository
+        uses: actions/checkout@v4
+
+      - name: Create network
+        run: docker network create example
+
+      - name: Set up DS container
+        run: |
+          scripts/ds-create.sh \
+              --image=${{ env.DS_IMAGE }} \
+              --hostname=ds.example.com \
+              --network=example \
+              --network-alias=ds.example.com \
+              --password=Secret.123 \
+              --base-dn=dc=example,dc=com \
+              ds
+
+      - name: Set up MCP container
+        run: |
+          scripts/runner-init.sh \
+              --image=fedora:latest \
+              --hostname=mcp.example.com \
+              --network=example \
+              --network-alias=mcp.example.com \
+              mcp
+
+          # Install build dependencies for python-ldap and other tools
+          docker exec mcp dnf install -y git python3-pip gcc python3-devel openldap-devel cyrus-sasl-devel gawk
+          docker exec mcp pip install uv
+
+      - name: Install DirKeeper MCP server
+        run: |
+          docker cp . mcp:/opt/dirkeeper
+
+      - name: Install dependencies
+        run: |
+          docker exec -w /opt/dirkeeper mcp uv venv
+          docker exec -w /opt/dirkeeper mcp uv pip install -r requirements.txt
+
+      - name: Install LLM
+        run: |
+          curl -fsSL https://ollama.com/install.sh | docker exec -i mcp sh
+          docker exec -d mcp ollama serve
+          sleep 10
+          docker exec mcp ollama pull llama3.2
+
+      - name: Install MCP CLI
+        run: |
+          docker exec -w /opt mcp git clone https://github.com/chrishayuk/mcp-cli.git
+
+      - name: Configure MCP CLI
+        run: |
+          docker exec -i -w /opt/mcp-cli mcp tee server_config.json << EOF
+          {
+            "mcpServers": {
+              "dirkeeper": {
+                "command": "/usr/local/bin/uv",
+                "args": [
+                  "--directory",
+                  "/opt/dirkeeper",
+                  "run",
+                  "server.py"
+                ],
+                "env": {
+                  "LDAP_URL": "ldap://ds.example.com:3389",
+                  "LDAP_BASE_DN": "dc=example,dc=com",
+                  "LDAP_BIND_DN": "cn=Directory Manager",
+                  "LDAP_BIND_PASSWORD": "Secret.123"
+                }
+              }
+            }
+          }
+          EOF
+
+      - name: Check MCP servers
+        run: |
+          docker exec -w /opt/mcp-cli mcp uv run mcp-cli servers
+
+      - name: Check MCP resources
+        run: |
+          docker exec -w /opt/mcp-cli mcp uv run mcp-cli resources
+
+      - name: Check MCP prompts
+        run: |
+          docker exec -w /opt/mcp-cli mcp uv run mcp-cli prompts
+
+      - name: Check MCP tools
+        run: |
+          docker exec -w /opt/mcp-cli mcp uv run mcp-cli tools
+
+      - name: Add test users to DS
+        run: |
+          docker exec -i ds ldapadd \
+              -H ldap://ds.example.com:3389 \
+              -D "cn=Directory Manager" \
+              -w Secret.123 \
+              -x << EOF
+          dn: uid=testuser1,ou=people,dc=example,dc=com
+          objectClass: top
+          objectClass: person
+          objectClass: organizationalPerson
+          objectClass: inetOrgPerson
+          objectClass: nsPerson
+          objectClass: nsAccount
+          objectClass: nsOrgPerson
+          objectClass: posixAccount
+          uid: testuser1
+          cn: Test User 1
+          sn: User
+          givenName: Test
+          displayName: Test User 1
+          mail: testuser1@example.com
+          uidNumber: 1001
+          gidNumber: 1001
+          homeDirectory: /home/testuser1
+
+          dn: uid=testuser2,ou=people,dc=example,dc=com
+          objectClass: top
+          objectClass: person
+          objectClass: organizationalPerson
+          objectClass: inetOrgPerson
+          objectClass: nsPerson
+          objectClass: nsAccount
+          objectClass: nsOrgPerson
+          objectClass: posixAccount
+          uid: testuser2
+          cn: Test User 2
+          sn: User
+          givenName: Test
+          displayName: Test User 2
+          mail: testuser2@example.com
+          uidNumber: 1002
+          gidNumber: 1002
+          homeDirectory: /home/testuser2
+          EOF
+
+      - name: Verify test users were created
+        run: |
+          echo "Verifying test users were created..."
+          docker exec ds ldapsearch \
+              -H ldap://ds.example.com:3389 \
+              -D "cn=Directory Manager" \
+              -w Secret.123 \
+              -x \
+              -b "ou=people,dc=example,dc=com" \
+              -s sub \
+              "(uid=testuser*)" \
+              dn uid cn mail
+
+      - name: Find DS users via MCP
+        run: |
+          docker exec -w /opt/mcp-cli mcp uv run mcp-cli cmd \
+              --provider=ollama \
+              --model=llama3.2 \
+              --server dirkeeper \
+              --prompt "show me all users in the directory" \
+              | tee output
+
+          # Check if test users are found
+          if grep -q "testuser1" output && grep -q "testuser2" output; then
+            echo "✓ Test users found successfully"
+          else
+            echo "✗ Test users not found in MCP response"
+            cat output
+            exit 1
+          fi
+
+      - name: Query users with email filter via MCP
+        run: |
+          docker exec -w /opt/mcp-cli mcp uv run mcp-cli cmd \
+              --provider=ollama \
+              --model=llama3.2 \
+              --server dirkeeper \
+              --prompt "find a user with email testuser1@example.com" \
+              | tee output
+
+          # Check if email-filtered users are found
+          if grep -q "testuser1" output; then
+            echo "✓ Email filter query successful"
+          else
+            echo "✗ Email filter query failed"
+            cat output
+            exit 1
+          fi
+
+      - name: Debug environment
+        if: failure()
+        run: |
+          echo "=== Docker containers ==="
+          docker ps -a
+
+          echo "=== Docker networks ==="
+          docker network ls
+
+          echo "=== DS container logs ==="
+          docker logs ds || true
+
+          echo "=== MCP container logs ==="
+          docker logs mcp || true
+
+          echo "=== DS health check ==="
+          docker exec ds dsconf localhost monitor server || true
+
+          echo "=== MCP CLI config ==="
+          docker exec mcp cat /opt/mcp-cli/server_config.json || true
