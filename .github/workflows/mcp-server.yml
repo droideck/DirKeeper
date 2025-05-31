@@ -88,19 +88,19 @@ jobs:
 
       - name: Check MCP servers
         run: |
-          docker exec -w /opt/mcp-cli mcp uv run mcp-cli servers list
+          docker exec -w /opt/mcp-cli mcp uv run mcp-cli servers
 
       - name: Check MCP resources
         run: |
-          docker exec -w /opt/mcp-cli mcp uv run mcp-cli resources list
+          docker exec -w /opt/mcp-cli mcp uv run mcp-cli resources
 
       - name: Check MCP prompts
         run: |
-          docker exec -w /opt/mcp-cli mcp uv run mcp-cli prompts list
+          docker exec -w /opt/mcp-cli mcp uv run mcp-cli prompts
 
       - name: Check MCP tools
         run: |
-          docker exec -w /opt/mcp-cli mcp uv run mcp-cli tools list
+          docker exec -w /opt/mcp-cli mcp uv run mcp-cli tools
 
       - name: Add test users to DS
         run: |
