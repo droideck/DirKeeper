@@ -148,6 +148,19 @@ jobs:
           homeDirectory: /home/testuser2
           EOF
 
+      - name: Verify test users were created
+        run: |
+          echo "Verifying test users were created..."
+          docker exec ds ldapsearch \
+              -H ldap://ds.example.com:3389 \
+              -D "cn=Directory Manager" \
+              -w Secret.123 \
+              -x \
+              -b "dc=pki,dc=example,dc=com" \
+              -s sub \
+              "(uid=testuser*)" \
+              dn uid cn mail
+
       - name: Find DS users via MCP
         run: |
           docker exec -w /opt/mcp-cli mcp uv run mcp-cli cmd \
