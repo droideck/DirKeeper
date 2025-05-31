@@ -22,7 +22,7 @@ jobs:
 
       - name: Set up DS container
         run: |
-          tests/bin/ds-create.sh \
+          scripts/ds-create.sh \
               --image=${{ env.DS_IMAGE }} \
               --hostname=ds.example.com \
               --network=example \
@@ -33,7 +33,7 @@ jobs:
 
       - name: Set up MCP container
         run: |
-          tests/bin/runner-init.sh \
+          scripts/runner-init.sh \
               --image=fedora:latest \
               --hostname=mcp.example.com \
               --network=example \

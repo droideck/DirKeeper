@@ -85,43 +85,6 @@ while getopts v-: arg ; do
     esac
 done
 
-create_server() {
-
-    echo "Creating DS server"
-
-    OPTIONS=()
-    OPTIONS+=(--hostname=$HOSTNAME)
-
-    if [ "$NETWORK" != "" ]
-    then
-        OPTIONS+=(--network=$NETWORK)
-    fi
-
-    if [ "$ALIAS" != "" ]
-    then
-        OPTIONS+=(--network-alias=$ALIAS)
-    fi
-
-    $SCRIPT_DIR/runner-init.sh "${OPTIONS[@]}" $NAME
-
-    docker exec $NAME dnf install -y 389-ds-base
-
-    docker exec $NAME dscreate create-template ds.inf
-
-    docker exec $NAME sed -i \
-        -e "s/;instance_name = .*/instance_name = localhost/g" \
-        -e "s/;port = .*/port = 3389/g" \
-        -e "s/;secure_port = .*/secure_port = 3636/g" \
-        -e "s/;root_password = .*/root_password = $PASSWORD/g" \
-        -e "s/;suffix = .*/suffix = dc=example,dc=com/g" \
-        -e "s/;self_sign_cert = .*/self_sign_cert = False/g" \
-        -e "s/;create_suffix_entry = .*/create_suffix_entry = True/g" \
-        -e "s/;sample_entries = .*/sample_entries = yes/g" \
-        ds.inf
-
-    docker exec $NAME dscreate from-file ds.inf
-}
-
 create_container() {
 
     echo "Creating DS volume"
@@ -285,12 +248,7 @@ if [ "$DEBUG" = true ] ; then
     echo "PASSWORD: $PASSWORD"
 fi
 
-if [ "$IMAGE" = "mcp-runner" ]
-then
-    create_server
-else
-    create_container
-fi
+create_container
 
 add_base_entries
 
