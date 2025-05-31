@@ -7,7 +7,6 @@ SCRIPT_PATH=$(readlink -f "$0")
 SCRIPT_NAME=$(basename "$SCRIPT_PATH")
 SCRIPT_DIR=$(dirname "$SCRIPT_PATH")
 
-SUFFIX=
 BASE_DN=
 
 VERBOSE=
@@ -22,8 +21,7 @@ usage() {
     echo "    --network=<network>      Container network"
     echo "    --network-alias=<alias>  Container network alias"
     echo "    --password=<password>    Directory Manager password"
-    echo "    --suffix=<DN>            Suffix (default: dc=example,dc=com)"
-    echo "    --base-dn=<DN>           Base DN (default: dc=pki,dc=example,dc=com)"
+    echo "    --base-dn=<DN>           Base DN (default: dc=example,dc=com)"
     echo " -v,--verbose                Run in verbose mode."
     echo "    --debug                  Run in debug mode."
     echo "    --help                   Show help message."
@@ -53,9 +51,6 @@ while getopts v-: arg ; do
         password=?*)
             PASSWORD="$LONG_OPTARG"
             ;;
-        suffix=?*)
-            SUFFIX="$LONG_OPTARG"
-            ;;
         base-dn=?*)
             BASE_DN="$LONG_OPTARG"
             ;;
@@ -74,7 +69,7 @@ while getopts v-: arg ; do
             break # "--" terminates argument processing
             ;;
         image* | hostname* | network* | network-alias* | password* | \
-        suffix* | base-dn*)
+        base-dn*)
             echo "ERROR: Missing argument for --$OPTARG option" >&2
             exit 1
             ;;
@@ -118,8 +113,10 @@ create_server() {
         -e "s/;port = .*/port = 3389/g" \
         -e "s/;secure_port = .*/secure_port = 3636/g" \
         -e "s/;root_password = .*/root_password = $PASSWORD/g" \
-        -e "s/;suffix = .*/suffix = $SUFFIX/g" \
+        -e "s/;suffix = .*/suffix = dc=example,dc=com/g" \
         -e "s/;self_sign_cert = .*/self_sign_cert = False/g" \
+        -e "s/;create_suffix_entry = .*/create_suffix_entry = True/g" \
+        -e "s/;sample_entries = .*/sample_entries = yes/g" \
         ds.inf
 
     docker exec $NAME dscreate from-file ds.inf
@@ -143,7 +140,7 @@ create_container() {
     fi
 
     OPTIONS+=(-e DS_DM_PASSWORD=$PASSWORD)
-    OPTIONS+=(-e DS_SUFFIX_NAME=$SUFFIX)
+    OPTIONS+=(-e DS_SUFFIX_NAME=dc=example,dc=com)
     OPTIONS+=(-p 3389)
     OPTIONS+=(-p 3636)
 
@@ -164,14 +161,6 @@ create_container() {
     OPTIONS+=(--password=$PASSWORD)
 
     $SCRIPT_DIR/ds-start.sh "${OPTIONS[@]}" $NAME
-
-    echo "Creating database backend"
-
-    docker exec $NAME dsconf localhost backend create \
-        --suffix "$SUFFIX" \
-        --be-name userRoot > /dev/null
-
-    docker exec $NAME dsconf localhost backend suffix list
 }
 
 add_base_entries() {
@@ -180,7 +169,7 @@ add_base_entries() {
 
     # Wait for Directory Manager password to be properly set by container
     echo "Waiting for Directory Manager password configuration..."
-    sleep 15
+    sleep 5
 
     # Verify we can authenticate with Directory Manager
     MAX_AUTH_ATTEMPTS=10
@@ -201,23 +190,6 @@ add_base_entries() {
         echo "ERROR: Directory Manager authentication failed"
         exit 1
     fi
-
-    SUFFIX_DC=$(echo "$SUFFIX" | sed 's/^dc=\([^,]*\),.*$/\1/')
-    BASE_DC=$(echo "$BASE_DN" | sed 's/^dc=\([^,]*\),.*$/\1/')
-
-    docker exec -i $NAME ldapadd \
-        -H ldap://$HOSTNAME:3389 \
-        -D "cn=Directory Manager" \
-        -w $PASSWORD \
-        -x > /dev/null << EOF
-dn: $SUFFIX
-objectClass: domain
-dc: $SUFFIX_DC
-
-dn: $BASE_DN
-objectClass: domain
-dc: $BASE_DC
-EOF
 }
 
 # remove parsed options and args from $@ list
@@ -242,25 +214,15 @@ then
     IMAGE=quay.io/389ds/dirsrv
 fi
 
-if [ "$SUFFIX" = "" ] && [ "$BASE_DN" = "" ]
+if [ "$BASE_DN" = "" ]
 then
-    SUFFIX="dc=example,dc=com"
-    BASE_DN="dc=pki,$SUFFIX"
-
-elif [ "$SUFFIX" = "" ]
-then
-    SUFFIX=$(echo "$BASE_DN" | sed 's/^dc=[^,]*,\(.*$\)/\1/')
-
-elif [ "$BASE_DN" = "" ]
-then
-    BASE_DN="dc=pki,$SUFFIX"
+    BASE_DN="dc=example,dc=com"
 fi
 
 if [ "$DEBUG" = true ] ; then
     echo "NAME: $NAME"
     echo "IMAGE: $IMAGE"
     echo "HOSTNAME: $HOSTNAME"
-    echo "SUFFIX: $SUFFIX"
     echo "BASE_DN: $BASE_DN"
     echo "PASSWORD: $PASSWORD"
 fi
@@ -280,7 +242,7 @@ docker exec $NAME ldapsearch \
     -D "cn=Directory Manager" \
     -w $PASSWORD \
     -x \
-    -b "$SUFFIX" \
+    -b "$BASE_DN" \
     -s base
 
 # allow more time to connect to network
