@@ -111,6 +111,9 @@ jobs:
               -x << EOF
           dn: uid=testuser1,dc=pki,dc=example,dc=com
           objectClass: top
+          objectClass: person
+          objectClass: organizationalPerson
+          objectClass: inetOrgPerson
           objectClass: nsPerson
           objectClass: nsAccount
           objectClass: nsOrgPerson
@@ -127,6 +130,9 @@ jobs:
 
           dn: uid=testuser2,dc=pki,dc=example,dc=com
           objectClass: top
+          objectClass: person
+          objectClass: organizationalPerson
+          objectClass: inetOrgPerson
           objectClass: nsPerson
           objectClass: nsAccount
           objectClass: nsOrgPerson
