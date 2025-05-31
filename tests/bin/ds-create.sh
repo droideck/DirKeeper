@@ -140,7 +140,8 @@ create_container() {
     fi
 
     OPTIONS+=(-e DS_DM_PASSWORD=$PASSWORD)
-    OPTIONS+=(-e DS_SUFFIX_NAME=dc=example,dc=com)
+    OPTIONS+=(-e DS_SUFFIX_NAME=$BASE_DN)
+    OPTIONS+=(-e DS_CREATE_SUFFIX_ENTRY=True)
     OPTIONS+=(-p 3389)
     OPTIONS+=(-p 3636)
 
@@ -189,6 +190,63 @@ add_base_entries() {
     if [ $AUTH_ATTEMPT -gt $MAX_AUTH_ATTEMPTS ]; then
         echo "ERROR: Directory Manager authentication failed"
         exit 1
+    fi
+
+    # Create backend if it doesn't exist
+    echo "Creating backend for $BASE_DN"
+    docker exec $NAME dsconf localhost backend create --suffix="$BASE_DN" --be-name backend1 --create-entries --create-suffix || true
+
+    # Check if base DN exists, if not create it manually
+    if ! docker exec $NAME ldapsearch -x -H ldap://$HOSTNAME:3389 -D "cn=Directory Manager" -w $PASSWORD -b "$BASE_DN" -s base > /dev/null 2>&1; then
+        echo "Creating base DN manually: $BASE_DN"
+
+        # Extract the domain component (dc) values from BASE_DN
+        if [[ "$BASE_DN" =~ dc=([^,]+) ]]; then
+            DC_VALUE="${BASH_REMATCH[1]}"
+        else
+            DC_VALUE="example"
+        fi
+
+        docker exec -i $NAME ldapadd \
+            -H ldap://$HOSTNAME:3389 \
+            -D "cn=Directory Manager" \
+            -w $PASSWORD \
+            -x << EOF
+dn: $BASE_DN
+objectClass: top
+objectClass: domain
+dc: $DC_VALUE
+EOF
+    fi
+
+    # Check if ou=people exists, if not create it
+    if ! docker exec $NAME ldapsearch -x -H ldap://$HOSTNAME:3389 -D "cn=Directory Manager" -w $PASSWORD -b "ou=people,$BASE_DN" -s base > /dev/null 2>&1; then
+        echo "Creating ou=people,$BASE_DN"
+        docker exec -i $NAME ldapadd \
+            -H ldap://$HOSTNAME:3389 \
+            -D "cn=Directory Manager" \
+            -w $PASSWORD \
+            -x << EOF
+dn: ou=people,$BASE_DN
+objectClass: top
+objectClass: organizationalUnit
+ou: people
+EOF
+    fi
+
+    # Check if ou=groups exists, if not create it
+    if ! docker exec $NAME ldapsearch -x -H ldap://$HOSTNAME:3389 -D "cn=Directory Manager" -w $PASSWORD -b "ou=groups,$BASE_DN" -s base > /dev/null 2>&1; then
+        echo "Creating ou=groups,$BASE_DN"
+        docker exec -i $NAME ldapadd \
+            -H ldap://$HOSTNAME:3389 \
+            -D "cn=Directory Manager" \
+            -w $PASSWORD \
+            -x << EOF
+dn: ou=groups,$BASE_DN
+objectClass: top
+objectClass: organizationalUnit
+ou: groups
+EOF
     fi
 }
 
