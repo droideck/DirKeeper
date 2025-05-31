@@ -181,3 +181,4 @@ After that, restart your Claude Desktop tool and you'll be able to use the tool 
 - [389 Directory Server Documentation](https://www.port389.org/docs/389ds/documentation.html)
 - [MCP Python SDK](https://pypi.org/project/mcp/)
 - [MCP CLI Tool](https://github.com/chrishayuk/mcp-cli)
+- [MCP GitHub CI Inspiration - Dogtag PKI](https://github.com/dogtagpki/pki/commit/45142b5e19128a608c8940780a41b8b12cd50e68)
