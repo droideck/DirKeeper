@@ -111,23 +111,33 @@ jobs:
               -x << EOF
           dn: uid=testuser1,dc=pki,dc=example,dc=com
           objectClass: top
-          objectClass: person
-          objectClass: organizationalPerson
-          objectClass: inetOrgPerson
+          objectClass: nsPerson
+          objectClass: nsAccount
+          objectClass: nsOrgPerson
+          objectClass: posixAccount
           uid: testuser1
           cn: Test User 1
           sn: User
+          givenName: Test
           mail: testuser1@example.com
+          uidNumber: 1001
+          gidNumber: 1001
+          homeDirectory: /home/testuser1
 
           dn: uid=testuser2,dc=pki,dc=example,dc=com
           objectClass: top
-          objectClass: person
-          objectClass: organizationalPerson
-          objectClass: inetOrgPerson
+          objectClass: nsPerson
+          objectClass: nsAccount
+          objectClass: nsOrgPerson
+          objectClass: posixAccount
           uid: testuser2
           cn: Test User 2
           sn: User
+          givenName: Test
           mail: testuser2@example.com
+          uidNumber: 1002
+          gidNumber: 1002
+          homeDirectory: /home/testuser2
           EOF
 
       - name: Find DS users via MCP
