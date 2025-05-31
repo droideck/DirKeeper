@@ -38,7 +38,8 @@ jobs:
               --network-alias=mcp.example.com \
               mcp
 
-          docker exec mcp dnf install -y git python3-pip
+          # Install build dependencies for python-ldap and other tools
+          docker exec mcp dnf install -y git python3-pip gcc python3-devel openldap-devel cyrus-sasl-devel
           docker exec mcp pip install uv
 
       - name: Install DirKeeper MCP server
