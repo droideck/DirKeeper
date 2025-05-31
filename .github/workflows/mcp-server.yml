@@ -109,7 +109,7 @@ jobs:
               -D "cn=Directory Manager" \
               -w Secret.123 \
               -x << EOF
-          dn: uid=testuser1,dc=pki,dc=example,dc=com
+          dn: uid=testuser1,ou=people,dc=example,dc=com
           objectClass: top
           objectClass: person
           objectClass: organizationalPerson
@@ -128,7 +128,7 @@ jobs:
           gidNumber: 1001
           homeDirectory: /home/testuser1
 
-          dn: uid=testuser2,dc=pki,dc=example,dc=com
+          dn: uid=testuser2,ou=people,dc=example,dc=com
           objectClass: top
           objectClass: person
           objectClass: organizationalPerson
