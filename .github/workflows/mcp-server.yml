@@ -119,6 +119,7 @@ jobs:
           cn: Test User 1
           sn: User
           givenName: Test
+          displayName: Test User 1
           mail: testuser1@example.com
           uidNumber: 1001
           gidNumber: 1001
@@ -134,6 +135,7 @@ jobs:
           cn: Test User 2
           sn: User
           givenName: Test
+          displayName: Test User 2
           mail: testuser2@example.com
           uidNumber: 1002
           gidNumber: 1002
