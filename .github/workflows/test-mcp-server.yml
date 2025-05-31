@@ -1,0 +1,23 @@
+name: Test MCP Server
+
+on:
+  push:
+    branches:
+      - main
+      - 'feature/**'
+      - 'test/**'
+      - 'mcp-**'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  test-mcp:
+    name: Test MCP Server Integration
+    uses: ./.github/workflows/mcp-server.yml
+    # You can pass variables if needed:
+    # with:
+    #   some_input: value
+    # secrets:
+    #   some_secret: ${{ secrets.SECRET_NAME }}
