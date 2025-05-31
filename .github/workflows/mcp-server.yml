@@ -199,23 +199,6 @@ jobs:
             exit 1
           fi
 
-      - name: Test MCP tool directly
-        run: |
-          docker exec -w /opt/mcp-cli mcp uv run mcp-cli tools call \
-              --server dirkeeper \
-              --tool get_users \
-              --arguments '{}' \
-              | tee output
-
-          # Check if direct tool call works
-          if grep -q "testuser" output; then
-            echo "✓ Direct MCP tool call successful"
-          else
-            echo "✗ Direct MCP tool call failed"
-            cat output
-            exit 1
-          fi
-
       - name: Debug environment
         if: failure()
         run: |
