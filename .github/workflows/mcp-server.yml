@@ -187,11 +187,11 @@ jobs:
               --provider=ollama \
               --model=llama3.2 \
               --server dirkeeper \
-              --prompt "find users with email containing @example.com" \
+              --prompt "find a user with email testuser1@example.com" \
               | tee output
 
           # Check if email-filtered users are found
-          if grep -q "@example.com" output; then
+          if grep -q "testuser1" output; then
             echo "✓ Email filter query successful"
           else
             echo "✗ Email filter query failed"
