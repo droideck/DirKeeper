@@ -19,12 +19,15 @@ from server import (
 @pytest.fixture
 def mock_env():
     """Mock environment variables for testing."""
-    with patch.dict(os.environ, {
-        'LDAP_URL': 'ldap://localhost:3389',
-        'LDAP_BASE_DN': 'dc=test,dc=com',
-        'LDAP_BIND_DN': 'cn=Directory Manager',
-        'LDAP_BIND_PASSWORD': 'TestPassword123'
-    }):
+    # Use environment variables if available, otherwise use defaults
+    env_vars = {
+        'LDAP_URL': os.environ.get('LDAP_URL', 'ldap://localhost:3389'),
+        'LDAP_BASE_DN': os.environ.get('LDAP_BASE_DN', 'dc=test,dc=com'),
+        'LDAP_BIND_DN': os.environ.get('LDAP_BIND_DN', 'cn=Directory Manager'),
+        'LDAP_BIND_PASSWORD': os.environ.get('LDAP_BIND_PASSWORD', 'TestPassword123')
+    }
+
+    with patch.dict(os.environ, env_vars):
         yield
 
 @pytest.fixture

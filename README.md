@@ -7,7 +7,20 @@
 
 ## What is DirKeeper?
 
-DirKeeper transforms how you interact with your LDAP directory. Instead of writing complex LDAP queries, you can now use natural language to manage and query your 389 Directory Server. Built on top of the Model Context Protocol (MCP), it provides a secure bridge between conversational AI and directory operations.
+DirKeeper transforms how you interact with your LDAP directory. Instead of writing complex LDAP queries, you can now use natural language to query and monitor your 389 Directory Server users. Built on top of the Model Context Protocol (MCP), it provides a secure bridge between conversational AI and directory operations.
+
+**Current Capabilities:**
+- **User Discovery**: Find users by name, email, or any attribute using natural language
+- **Account Status Monitoring**: Check if users are active, locked, or inactive
+- **Detailed User Information**: Get comprehensive user profiles and account details
+
+**Available Tools:**
+- `list_all_users` - Retrieve all users in the directory
+- `search_users_by_name` - Find users by name, email, or display name
+- `get_user_details` - Get detailed information about a specific user
+- `list_active_users` - Show only active/unlocked user accounts
+- `list_locked_users` - Show only locked user accounts
+- `search_users_by_attribute` - Search by specific LDAP attributes (department, title, etc.)
 
 ## Getting Started
 
@@ -107,24 +120,25 @@ Launch the MCP server with:
 uv run server.py
 ```
 
-### Example Interactions
+### Example Natural Language Interactions
 
-Here's how you can interact with your directory:
+Here's how you can interact with your directory using natural language:
 
+Use this command structure with different prompts:
+```bash
+uv run mcp-cli cmd --provider=ollama --model=llama3.2 --server dirkeeper --prompt "<your_question>"
+```
+
+**Quick examples:**
 ```bash
 # Find all users
-uv run mcp-cli cmd \
-    --provider=ollama \
-    --model=llama3.2 \
-    --server dirkeeper \
-    --prompt "show me all users in the directory"
+uv run mcp-cli cmd --provider=ollama --model=llama3.2 --server dirkeeper --prompt "show me all users"
 
-# Search for specific users
-uv run mcp-cli cmd \
-    --provider=ollama \
-    --model=llama3.2 \
-    --server dirkeeper \
-    --prompt "find users with email containing @example.com"
+# Check account status
+uv run mcp-cli cmd --provider=ollama --model=llama3.2 --server dirkeeper --prompt "which accounts are locked?"
+
+# Search by attribute
+uv run mcp-cli cmd --provider=ollama --model=llama3.2 --server dirkeeper --prompt "find users in the IT department"
 ```
 
 ### Alternative Usage (Claude Desktop)
@@ -164,16 +178,18 @@ After that, restart your Claude Desktop tool and you'll be able to use the tool 
 
 - **MCP Integration**: Implements Model Context Protocol for secure AI interactions
 - **lib389 Integration**: Uses the official Python library for 389 Directory Server
+- **User-Focused Operations**: Specialized tools for user account management and monitoring
+- **Account Status Detection**: Advanced status checking including locked, active, and inactive states
 
 ## Project Status & Limitations
 
 > **Note:** This is an experimental project exploring the potential of natural language interaction with 389 Directory Server.
 
-* **Current State & Potential**: While currently in early experimentation, DirKeeper demonstrates the potential to revolutionize LDAP directory management by enabling natural language queries and operations. The project aims to bridge the gap between complex LDAP operations and intuitive human interaction, making directory management more accessible to users without deep LDAP expertise. Future versions may include advanced features like complex query building, managing directory configuration, audit, and ideally integration with other IdM projects.
+* **Current State & Potential**: While currently in early experimentation, DirKeeper demonstrates the potential to revolutionize LDAP directory management by enabling natural language queries for user account operations. The project focuses specifically on user management tasks - finding users, checking account status, and retrieving user details - making these common administrative tasks more accessible to users without deep LDAP expertise. Future versions may expand to include user creation, modification, group management, and integration with other IdM projects.
 
-* **Technical Limitations**: The current implementation requires local 389 Directory Server and Ollama instances, uses STDIO transport for MCP communication, and is limited to basic user operations. The lib389 package will be available on official PyPI soon, and the API/functionality may change between versions. Not recommended for production use at this stage. It's just an experiment as of now.
+* **Technical Limitations**: The current implementation requires local 389 Directory Server and Ollama instances, uses STDIO transport for MCP communication, and is currently limited to read-only user operations. User account modifications, password management, and group operations are not yet supported. The lib389 package will be available on official PyPI soon, and the API/functionality may change between versions. Not recommended for production use at this stage. It's just an experiment as of now.
 
-* **Development Focus**: The project is actively exploring the boundaries of what's possible with natural language processing in directory management, with a focus on reliability, security, and user experience.
+* **Development Focus**: The project is actively exploring the boundaries of what's possible with natural language processing in directory user management, with a focus on reliability, security, and user experience for common administrative tasks.
 
 ## Additional Resources
 
