@@ -7,6 +7,11 @@ from lib389.idm.user import nsUserAccounts
 from mcp.types import CallToolResult, TextContent
 from lib389.idm.account import Accounts
 from datetime import datetime
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Create an MCP server
 mcp = FastMCP("DirKeeper")
@@ -32,271 +37,27 @@ def get_ldap_config():
 
 def get_ldap_connection():
     """Create and return a connection to the LDAP server."""
-    config = get_ldap_config()
-
-    # Create a DirSrv instance
-    ds = DirSrv(verbose=True)
-
-    # Connect to the remote LDAP server
-    ds.remote_simple_allocate(
-        config['ldap_url'],
-        config['bind_dn'],
-        config['bind_password']
-    )
-
-    # Open the connection
-    ds.open()
-    return ds
-
-@mcp.tool()
-def search_users_advanced(
-    query: Optional[str] = None,
-    search_type: str = "exact",
-    filters: Optional[Dict[str, Any]] = None,
-    return_attributes: Optional[List[str]] = None,
-    limit: int = 50,
-    basedn: Optional[str] = None
-):
-    """Advanced user search of the 389 Directory Server with complex filtering capabilities.
-
-    Args:
-        query: Search term to match against common user attributes (cn, uid, mail, givenName, sn)
-        search_type: Type of search - "exact", "fuzzy", or "wildcard"
-        filters: Advanced filtering options:
-            - user_status: "active", "inactive", "locked"
-            - last_login_days: Number of days since last login (uses lastLoginTime)
-            - group_membership: List of groups the user must be a member of
-            - attribute_contains: Dict of attribute:value pairs to match
-            - has_attributes: List of attributes that must be present
-        return_attributes: Specific attributes to return (default: common user attributes)
-        limit: Maximum number of results to return
-        basedn: Optional base DN to search from
-
-    Returns:
-        JSON containing filtered user entries with search metadata
-    """
     try:
-        # Get configuration
         config = get_ldap_config()
-        search_basedn = basedn or config['base_dn']
+        logger.info(f"Connecting to LDAP at {config['ldap_url']}")
 
-        # Connect to LDAP
-        ds = get_ldap_connection()
+        # Create a DirSrv instance
+        ds = DirSrv(verbose=False)
 
-        # Build the LDAP filter
-        ldap_filter_parts = []
-
-        # Handle main query search
-        if query:
-            query_filter = _build_query_filter(query, search_type)
-            ldap_filter_parts.append(query_filter)
-
-        # Handle advanced filters
-        if filters:
-            advanced_filter = _build_advanced_filter(filters)
-            if advanced_filter:
-                ldap_filter_parts.append(advanced_filter)
-
-        # Combine all filter parts
-        if len(ldap_filter_parts) > 1:
-            combined_filter = f"(&{' '.join(ldap_filter_parts)})"
-        elif len(ldap_filter_parts) == 1:
-            combined_filter = ldap_filter_parts[0]
-        else:
-            combined_filter = None # All users
-
-        # Determine return attributes
-        if return_attributes is None:
-            return_attributes = [
-                'uid', 'cn', 'sn', 'givenName', 'mail', 'telephoneNumber',
-                'title', 'department', 'nsAccountLock', 'createTimestamp',
-                'modifyTimestamp', 'lastLoginTime', 'memberOf'
-            ]
-
-        # Perform the search using lib389
-        users = nsUserAccounts(ds, search_basedn)
-
-        # Apply the filter and get results
-        try:
-            user_entries = users.filter(combined_filter)
-        except Exception as search_error:
-            # Fallback to basic search if complex filter fails
-            print(f"Advanced filter failed, falling back to basic search: {search_error}")
-            user_entries = users.list()
-
-        # Convert to list and apply filters/limit
-        results = []
-        count = 0
-        status_filter = filters.get('user_status') if filters else None
-
-        for user in user_entries:
-            if count >= limit:
-                break
-
-            try:
-                # Get user attributes as JSON
-                user_data_json = user.get_all_attrs_json()
-                user_data = json.loads(user_data_json)
-                user_dn = user_data.get('dn', '')
-
-                # Convert datetime objects in attributes to strings
-                if 'attrs' in user_data and isinstance(user_data['attrs'], dict):
-                    user_data['attrs'] = _convert_datetimes_to_strings(user_data['attrs'])
-
-                # Filter to only requested attributes if specified
-                if return_attributes:
-                    filtered_data = {}
-                    for attr in return_attributes:
-                        if attr in user_data.get('attrs', {}):
-                            filtered_data[attr] = user_data['attrs'][attr]
-
-                    # Always include DN
-                    filtered_data['dn'] = user_dn
-                    user_data = {'dn': user_dn, 'attrs': filtered_data}
-                else: # Ensure attrs exist even if not filtering, and it was processed
-                    user_data = {'dn': user_dn, 'attrs': user_data.get('attrs', {})}
-
-                # Add computed fields using proper 389 DS API
-                status_info = _get_user_status(ds, user_dn, search_basedn)
-                user_data['attrs']['computed_status'] = status_info
-
-                # Apply status filter if specified (post-processing since it requires individual account checks)
-                if status_filter and status_info.get('simple_status') != status_filter:
-                    continue
-
-                results.append(user_data)
-                count += 1
-
-            except Exception as user_error:
-                print(f"Error processing user {user_dn}: {user_error}")
-                continue
-
-        # Close the connection
-        ds.unbind_s()
-
-        # Build response with metadata
-        response_data = {
-            "type": "advanced_search_results",
-            "query": query,
-            "search_type": search_type,
-            "filters_applied": filters or {},
-            "total_returned": len(results),
-            "limit_applied": limit,
-            "ldap_filter_used": combined_filter,
-            "return_attributes": return_attributes,
-            "items": results
-        }
-
-        return CallToolResult(
-            content=[
-                TextContent(
-                    type="text",
-                    text=json.dumps(response_data, indent=2)
-                )
-            ]
+        # Connect to the remote LDAP server
+        ds.remote_simple_allocate(
+            config['ldap_url'],
+            config['bind_dn'],
+            config['bind_password']
         )
 
+        # Open the connection
+        ds.open()
+        logger.info("LDAP connection established successfully")
+        return ds
     except Exception as e:
-        error_message = f"Error performing advanced directory search: {str(e)}"
-        print(error_message)
-
-        return CallToolResult(
-            isError=True,
-            content=[
-                TextContent(
-                    type="text",
-                    text=error_message
-                )
-            ]
-        )
-
-
-def _build_query_filter(query: str, search_type: str) -> str:
-    """Build LDAP filter for main query search."""
-    # Common searchable attributes
-    search_attrs = ['uid', 'cn', 'sn', 'givenName', 'mail', 'displayName']
-
-    if search_type == "exact":
-        # Exact match on any of the common attributes
-        attr_filters = [f"({attr}={query})" for attr in search_attrs]
-        return f"(|{' '.join(attr_filters)})"
-
-    elif search_type == "wildcard":
-        # Wildcard search (contains)
-        attr_filters = [f"({attr}=*{query}*)" for attr in search_attrs]
-        return f"(|{' '.join(attr_filters)})"
-
-    elif search_type == "fuzzy":
-        # Fuzzy search - starts with or contains
-        attr_filters = []
-        for attr in search_attrs:
-            attr_filters.extend([
-                f"({attr}={query}*)",  # starts with
-                f"({attr}=*{query}*)"  # contains
-            ])
-        return f"(|{' '.join(attr_filters)})"
-
-    else:
-        # Default to wildcard
-        attr_filters = [f"({attr}=*{query}*)" for attr in search_attrs]
-        return f"(|{' '.join(attr_filters)})"
-
-
-def _build_advanced_filter(filters: Dict[str, Any]) -> str:
-    """Build LDAP filter for advanced filtering options.
-
-    Note: user_status filtering is handled in post-processing since it requires
-    individual account status checks using the 389 DS Accounts API.
-    """
-    filter_parts = []
-
-    # Last login filter (approximate - 389 DS uses lastLoginTime)
-    if 'last_login_days' in filters:
-        days = filters['last_login_days']
-        # This is a simplified approach - in production you'd want more sophisticated date handling
-        if days == 0:
-            filter_parts.append("(lastLoginTime=*)")
-        else:
-            # For now, just check if lastLoginTime exists or not
-            filter_parts.append("(lastLoginTime=*)")
-
-    # Group membership filter
-    if 'group_membership' in filters and filters['group_membership']:
-        groups = filters['group_membership']
-        if isinstance(groups, list):
-            group_filters = []
-            for group in groups:
-                # Handle both DN and simple group names
-                if group.startswith('cn='):
-                    group_filters.append(f"(memberOf={group})")
-                else:
-                    group_filters.append(f"(memberOf=cn={group},*)")
-
-            if len(group_filters) > 1:
-                filter_parts.append(f"(&{' '.join(group_filters)})")
-            else:
-                filter_parts.extend(group_filters)
-
-    # Attribute contains filter
-    if 'attribute_contains' in filters and filters['attribute_contains']:
-        attr_contains = filters['attribute_contains']
-        for attr, value in attr_contains.items():
-            filter_parts.append(f"({attr}=*{value}*)")
-
-    # Has attributes filter
-    if 'has_attributes' in filters and filters['has_attributes']:
-        has_attrs = filters['has_attributes']
-        for attr in has_attrs:
-            filter_parts.append(f"({attr}=*)")
-
-    # Combine all advanced filter parts
-    if len(filter_parts) > 1:
-        return f"(&{' '.join(filter_parts)})"
-    elif len(filter_parts) == 1:
-        return filter_parts[0]
-    else:
-        return ""
-
+        logger.error(f"Failed to connect to LDAP: {str(e)}")
+        raise
 
 def _get_user_status(ds_instance, user_dn: str, basedn: str) -> Dict[str, Any]:
     """Get comprehensive user status using proper 389 DS API."""
@@ -344,14 +105,528 @@ def _get_user_status(ds_instance, user_dn: str, basedn: str) -> Dict[str, Any]:
         }
 
     except Exception as e:
-        # Fallback to basic status if the advanced API fails
-        return {
-            'simple_status': 'unknown',
-            'detailed_status': f'error: {str(e)}',
-            'status_params': {},
-            'calc_time': None
+        logger.warning(f"Error getting user status for {user_dn}: {str(e)}")
+        # Fallback to basic status check
+        try:
+            accounts = Accounts(ds_instance, basedn)
+            acct = accounts.get(dn=user_dn)
+            # Check nsAccountLock attribute directly
+            attrs = acct.get_all_attrs()
+            if 'nsAccountLock' in attrs and attrs['nsAccountLock'] and attrs['nsAccountLock'][0].lower() == 'true':
+                return {
+                    'simple_status': 'locked',
+                    'detailed_status': 'DIRECTLY_LOCKED',
+                    'status_params': {},
+                    'calc_time': None
+                }
+            else:
+                return {
+                    'simple_status': 'active',
+                    'detailed_status': 'ACTIVATED',
+                    'status_params': {},
+                    'calc_time': None
+                }
+        except Exception as fallback_error:
+            logger.error(f"Fallback status check failed for {user_dn}: {str(fallback_error)}")
+            return {
+                'simple_status': 'unknown',
+                'detailed_status': f'error: {str(e)}',
+                'status_params': {},
+                'calc_time': None
+            }
+
+@mcp.tool()
+def list_all_users(limit: int = 50) -> CallToolResult:
+    """List all users in the directory.
+
+    Args:
+        limit: Maximum number of users to return (default: 50)
+
+    Returns:
+        JSON containing all user entries
+    """
+    try:
+        logger.info(f"Listing all users with limit {limit}")
+        config = get_ldap_config()
+        ds = get_ldap_connection()
+
+        users = nsUserAccounts(ds, config['base_dn'])
+        user_entries = users.list()
+
+        results = []
+        count = 0
+
+        for user in user_entries:
+            if count >= limit:
+                break
+
+            try:
+                user_data_json = user.get_all_attrs_json()
+                user_data = json.loads(user_data_json)
+                user_dn = user_data.get('dn', '')
+
+                # Convert datetime objects
+                if 'attrs' in user_data and isinstance(user_data['attrs'], dict):
+                    user_data['attrs'] = _convert_datetimes_to_strings(user_data['attrs'])
+
+                # Add status information
+                status_info = _get_user_status(ds, user_dn, config['base_dn'])
+                user_data['attrs']['computed_status'] = status_info
+
+                results.append(user_data)
+                count += 1
+
+            except Exception as user_error:
+                logger.error(f"Error processing user: {str(user_error)}")
+                continue
+
+        ds.unbind_s()
+
+        response_data = {
+            "type": "user_list",
+            "total_returned": len(results),
+            "limit_applied": limit,
+            "items": results
         }
 
+        logger.info(f"Successfully returned {len(results)} users")
+        return CallToolResult(
+            content=[
+                TextContent(
+                    type="text",
+                    text=json.dumps(response_data, indent=2)
+                )
+            ]
+        )
+
+    except Exception as e:
+        error_message = f"Error listing users: {str(e)}"
+        logger.error(error_message)
+        return CallToolResult(
+            isError=True,
+            content=[
+                TextContent(
+                    type="text",
+                    text=error_message
+                )
+            ]
+        )
+
+@mcp.tool()
+def search_users_by_name(name: str, limit: int = 50) -> CallToolResult:
+    """Search for users by name (uid, cn, givenName, sn, or displayName).
+
+    Args:
+        name: Name to search for (supports wildcards with *)
+        limit: Maximum number of users to return (default: 50)
+
+    Returns:
+        JSON containing matching user entries
+    """
+    try:
+        logger.info(f"Searching users by name: {name}")
+        config = get_ldap_config()
+        ds = get_ldap_connection()
+
+        # Build search filter for name
+        if '*' in name:
+            # User provided wildcards
+            search_filter = f"(|(uid={name})(cn={name})(givenName={name})(sn={name})(displayName={name})(mail={name}))"
+        else:
+            # Add wildcards for partial matching
+            search_filter = f"(|(uid=*{name}*)(cn=*{name}*)(givenName=*{name}*)(sn=*{name}*)(displayName=*{name}*)(mail=*{name}*))"
+
+        users = nsUserAccounts(ds, config['base_dn'])
+        user_entries = users.filter(search_filter)
+
+        results = []
+        count = 0
+
+        for user in user_entries:
+            if count >= limit:
+                break
+
+            try:
+                user_data_json = user.get_all_attrs_json()
+                user_data = json.loads(user_data_json)
+                user_dn = user_data.get('dn', '')
+
+                # Convert datetime objects
+                if 'attrs' in user_data and isinstance(user_data['attrs'], dict):
+                    user_data['attrs'] = _convert_datetimes_to_strings(user_data['attrs'])
+
+                # Add status information
+                status_info = _get_user_status(ds, user_dn, config['base_dn'])
+                user_data['attrs']['computed_status'] = status_info
+
+                results.append(user_data)
+                count += 1
+
+            except Exception as user_error:
+                logger.error(f"Error processing user: {str(user_error)}")
+                continue
+
+        ds.unbind_s()
+
+        response_data = {
+            "type": "user_search",
+            "search_term": name,
+            "filter_used": search_filter,
+            "total_returned": len(results),
+            "limit_applied": limit,
+            "items": results
+        }
+
+        logger.info(f"Found {len(results)} users matching '{name}'")
+        return CallToolResult(
+            content=[
+                TextContent(
+                    type="text",
+                    text=json.dumps(response_data, indent=2)
+                )
+            ]
+        )
+
+    except Exception as e:
+        error_message = f"Error searching users by name '{name}': {str(e)}"
+        logger.error(error_message)
+        return CallToolResult(
+            isError=True,
+            content=[
+                TextContent(
+                    type="text",
+                    text=error_message
+                )
+            ]
+        )
+
+@mcp.tool()
+def get_user_details(username: str) -> CallToolResult:
+    """Get detailed information about a specific user.
+
+    Args:
+        username: Username (uid) to get details for
+
+    Returns:
+        JSON containing detailed user information
+    """
+    try:
+        logger.info(f"Getting details for user: {username}")
+        config = get_ldap_config()
+        ds = get_ldap_connection()
+
+        users = nsUserAccounts(ds, config['base_dn'])
+
+        try:
+            user = users.get(username)
+            user_data_json = user.get_all_attrs_json()
+            user_data = json.loads(user_data_json)
+            user_dn = user_data.get('dn', '')
+
+            # Convert datetime objects
+            if 'attrs' in user_data and isinstance(user_data['attrs'], dict):
+                user_data['attrs'] = _convert_datetimes_to_strings(user_data['attrs'])
+
+            # Add status information
+            status_info = _get_user_status(ds, user_dn, config['base_dn'])
+            user_data['attrs']['computed_status'] = status_info
+
+            ds.unbind_s()
+
+            response_data = {
+                "type": "user_details",
+                "username": username,
+                "user": user_data
+            }
+
+            logger.info(f"Successfully retrieved details for user: {username}")
+            return CallToolResult(
+                content=[
+                    TextContent(
+                        type="text",
+                        text=json.dumps(response_data, indent=2)
+                    )
+                ]
+            )
+
+        except Exception as user_error:
+            ds.unbind_s()
+            error_message = f"User '{username}' not found: {str(user_error)}"
+            logger.warning(error_message)
+            return CallToolResult(
+                isError=True,
+                content=[
+                    TextContent(
+                        type="text",
+                        text=error_message
+                    )
+                ]
+            )
+
+    except Exception as e:
+        error_message = f"Error getting user details for '{username}': {str(e)}"
+        logger.error(error_message)
+        return CallToolResult(
+            isError=True,
+            content=[
+                TextContent(
+                    type="text",
+                    text=error_message
+                )
+            ]
+        )
+
+@mcp.tool()
+def list_active_users(limit: int = 50) -> CallToolResult:
+    """List all active (unlocked) users in the directory.
+
+    Args:
+        limit: Maximum number of users to return (default: 50)
+
+    Returns:
+        JSON containing active user entries
+    """
+    try:
+        logger.info(f"Listing active users with limit {limit}")
+        config = get_ldap_config()
+        ds = get_ldap_connection()
+
+        users = nsUserAccounts(ds, config['base_dn'])
+        user_entries = users.list()
+
+        results = []
+        count = 0
+        processed = 0
+
+        for user in user_entries:
+            if count >= limit:
+                break
+
+            try:
+                processed += 1
+                user_data_json = user.get_all_attrs_json()
+                user_data = json.loads(user_data_json)
+                user_dn = user_data.get('dn', '')
+
+                # Convert datetime objects
+                if 'attrs' in user_data and isinstance(user_data['attrs'], dict):
+                    user_data['attrs'] = _convert_datetimes_to_strings(user_data['attrs'])
+
+                # Add status information
+                status_info = _get_user_status(ds, user_dn, config['base_dn'])
+                user_data['attrs']['computed_status'] = status_info
+
+                # Only include active users
+                if status_info.get('simple_status') == 'active':
+                    results.append(user_data)
+                    count += 1
+
+            except Exception as user_error:
+                logger.error(f"Error processing user: {str(user_error)}")
+                continue
+
+        ds.unbind_s()
+
+        response_data = {
+            "type": "active_users",
+            "total_processed": processed,
+            "active_users_found": len(results),
+            "limit_applied": limit,
+            "items": results
+        }
+
+        logger.info(f"Successfully returned {len(results)} active users out of {processed} processed")
+        return CallToolResult(
+            content=[
+                TextContent(
+                    type="text",
+                    text=json.dumps(response_data, indent=2)
+                )
+            ]
+        )
+
+    except Exception as e:
+        error_message = f"Error listing active users: {str(e)}"
+        logger.error(error_message)
+        return CallToolResult(
+            isError=True,
+            content=[
+                TextContent(
+                    type="text",
+                    text=error_message
+                )
+            ]
+        )
+
+@mcp.tool()
+def list_locked_users(limit: int = 50) -> CallToolResult:
+    """List all locked users in the directory.
+
+    Args:
+        limit: Maximum number of users to return (default: 50)
+
+    Returns:
+        JSON containing locked user entries
+    """
+    try:
+        logger.info(f"Listing locked users with limit {limit}")
+        config = get_ldap_config()
+        ds = get_ldap_connection()
+
+        users = nsUserAccounts(ds, config['base_dn'])
+        user_entries = users.list()
+
+        results = []
+        count = 0
+        processed = 0
+
+        for user in user_entries:
+            if count >= limit:
+                break
+
+            try:
+                processed += 1
+                user_data_json = user.get_all_attrs_json()
+                user_data = json.loads(user_data_json)
+                user_dn = user_data.get('dn', '')
+
+                # Convert datetime objects
+                if 'attrs' in user_data and isinstance(user_data['attrs'], dict):
+                    user_data['attrs'] = _convert_datetimes_to_strings(user_data['attrs'])
+
+                # Add status information
+                status_info = _get_user_status(ds, user_dn, config['base_dn'])
+                user_data['attrs']['computed_status'] = status_info
+
+                # Only include locked users
+                if status_info.get('simple_status') == 'locked':
+                    results.append(user_data)
+                    count += 1
+
+            except Exception as user_error:
+                logger.error(f"Error processing user: {str(user_error)}")
+                continue
+
+        ds.unbind_s()
+
+        response_data = {
+            "type": "locked_users",
+            "total_processed": processed,
+            "locked_users_found": len(results),
+            "limit_applied": limit,
+            "items": results
+        }
+
+        logger.info(f"Successfully returned {len(results)} locked users out of {processed} processed")
+        return CallToolResult(
+            content=[
+                TextContent(
+                    type="text",
+                    text=json.dumps(response_data, indent=2)
+                )
+            ]
+        )
+
+    except Exception as e:
+        error_message = f"Error listing locked users: {str(e)}"
+        logger.error(error_message)
+        return CallToolResult(
+            isError=True,
+            content=[
+                TextContent(
+                    type="text",
+                    text=error_message
+                )
+            ]
+        )
+
+@mcp.tool()
+def search_users_by_attribute(attribute: str, value: str, limit: int = 50) -> CallToolResult:
+    """Search for users by a specific attribute value.
+
+    Args:
+        attribute: LDAP attribute name to search (e.g., 'employeeType', 'department', 'title')
+        value: Value to search for (supports wildcards with *)
+        limit: Maximum number of users to return (default: 50)
+
+    Returns:
+        JSON containing matching user entries
+    """
+    try:
+        logger.info(f"Searching users by attribute {attribute}={value}")
+        config = get_ldap_config()
+        ds = get_ldap_connection()
+
+        # Build search filter
+        if '*' in value:
+            search_filter = f"({attribute}={value})"
+        else:
+            search_filter = f"({attribute}=*{value}*)"
+
+        users = nsUserAccounts(ds, config['base_dn'])
+        user_entries = users.filter(search_filter)
+
+        results = []
+        count = 0
+
+        for user in user_entries:
+            if count >= limit:
+                break
+
+            try:
+                user_data_json = user.get_all_attrs_json()
+                user_data = json.loads(user_data_json)
+                user_dn = user_data.get('dn', '')
+
+                # Convert datetime objects
+                if 'attrs' in user_data and isinstance(user_data['attrs'], dict):
+                    user_data['attrs'] = _convert_datetimes_to_strings(user_data['attrs'])
+
+                # Add status information
+                status_info = _get_user_status(ds, user_dn, config['base_dn'])
+                user_data['attrs']['computed_status'] = status_info
+
+                results.append(user_data)
+                count += 1
+
+            except Exception as user_error:
+                logger.error(f"Error processing user: {str(user_error)}")
+                continue
+
+        ds.unbind_s()
+
+        response_data = {
+            "type": "attribute_search",
+            "attribute": attribute,
+            "value": value,
+            "filter_used": search_filter,
+            "total_returned": len(results),
+            "limit_applied": limit,
+            "items": results
+        }
+
+        logger.info(f"Found {len(results)} users with {attribute}={value}")
+        return CallToolResult(
+            content=[
+                TextContent(
+                    type="text",
+                    text=json.dumps(response_data, indent=2)
+                )
+            ]
+        )
+
+    except Exception as e:
+        error_message = f"Error searching users by attribute {attribute}={value}: {str(e)}"
+        logger.error(error_message)
+        return CallToolResult(
+            isError=True,
+            content=[
+                TextContent(
+                    type="text",
+                    text=error_message
+                )
+            ]
+        )
 
 if __name__ == "__main__":
     mcp.run()

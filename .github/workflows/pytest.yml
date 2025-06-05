@@ -1,0 +1,172 @@
+name: Pytest Tests
+
+on:
+  workflow_call:
+  workflow_dispatch:  # Allow manual triggering
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+env:
+  DS_IMAGE: ${{ vars.DS_IMAGE || 'quay.io/389ds/dirsrv' }}
+
+jobs:
+  test:
+    name: Pytest Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone DirKeeper repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.13'
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Set up DS container
+        run: |
+          scripts/ds-create.sh \
+              --image=${{ env.DS_IMAGE }} \
+              --hostname=localhost \
+              --password=TestPassword123 \
+              --base-dn=dc=test,dc=com \
+              ds-test
+
+      - name: Get DS port mapping
+        id: ds-port
+        run: |
+          # Get the mapped port for DS LDAP (3389)
+          DS_PORT=$(docker port ds-test 3389/tcp | cut -d: -f2)
+          echo "DS_PORT=$DS_PORT" >> $GITHUB_OUTPUT
+          echo "DS mapped to port: $DS_PORT"
+
+      - name: Add test data to DS
+        run: |
+          # Wait for DS to be ready
+          sleep 15
+
+          DS_PORT=${{ steps.ds-port.outputs.DS_PORT }}
+
+          docker exec -i ds-test ldapadd \
+              -H ldap://localhost:3389 \
+              -D "cn=Directory Manager" \
+              -w TestPassword123 \
+              -x << EOF
+          dn: uid=testuser1,ou=people,dc=test,dc=com
+          objectClass: top
+          objectClass: person
+          objectClass: organizationalPerson
+          objectClass: inetOrgPerson
+          objectClass: nsPerson
+          objectClass: nsAccount
+          objectClass: nsOrgPerson
+          objectClass: posixAccount
+          uid: testuser1
+          cn: Test User 1
+          sn: User
+          givenName: Test
+          displayName: Test User 1
+          mail: testuser1@test.com
+          uidNumber: 1001
+          gidNumber: 1001
+          homeDirectory: /home/testuser1
+
+          dn: uid=testuser2,ou=people,dc=test,dc=com
+          objectClass: top
+          objectClass: person
+          objectClass: organizationalPerson
+          objectClass: inetOrgPerson
+          objectClass: nsPerson
+          objectClass: nsAccount
+          objectClass: nsOrgPerson
+          objectClass: posixAccount
+          uid: testuser2
+          cn: Test User 2
+          sn: User
+          givenName: Test
+          displayName: Test User 2
+          mail: testuser2@test.com
+          uidNumber: 1002
+          gidNumber: 1002
+          homeDirectory: /home/testuser2
+          departmentNumber: Engineering
+
+          dn: uid=lockeduser,ou=people,dc=test,dc=com
+          objectClass: top
+          objectClass: person
+          objectClass: organizationalPerson
+          objectClass: inetOrgPerson
+          objectClass: nsPerson
+          objectClass: nsAccount
+          objectClass: nsOrgPerson
+          objectClass: posixAccount
+          uid: lockeduser
+          cn: Locked User
+          sn: User
+          givenName: Locked
+          displayName: Locked User
+          mail: lockeduser@test.com
+          uidNumber: 1003
+          gidNumber: 1003
+          homeDirectory: /home/lockeduser
+          nsAccountLock: true
+
+          dn: uid=contractor,ou=people,dc=test,dc=com
+          objectClass: top
+          objectClass: person
+          objectClass: organizationalPerson
+          objectClass: inetOrgPerson
+          objectClass: nsPerson
+          objectClass: nsAccount
+          objectClass: nsOrgPerson
+          objectClass: posixAccount
+          uid: contractor
+          cn: Contractor User
+          sn: User
+          givenName: Contractor
+          displayName: Contractor User
+          mail: contractor@test.com
+          uidNumber: 1004
+          gidNumber: 1004
+          homeDirectory: /home/contractor
+          employeeType: Contractor
+          EOF
+
+      - name: Install dependencies
+        run: |
+          uv venv
+          uv pip install -r requirements.txt
+          uv pip install pytest pytest-asyncio
+
+      - name: Run pytest
+        env:
+          LDAP_URL: "ldap://localhost:${{ steps.ds-port.outputs.DS_PORT }}"
+          LDAP_BASE_DN: "dc=test,dc=com"
+          LDAP_BIND_DN: "cn=Directory Manager"
+          LDAP_BIND_PASSWORD: "TestPassword123"
+        run: |
+          # Run the tests
+          uv run pytest tests/ -v -s
+
+      - name: Debug environment
+        if: failure()
+        run: |
+          echo "=== Docker containers ==="
+          docker ps -a
+
+          echo "=== DS container logs ==="
+          docker logs ds-test || true
+
+          echo "=== DS health check ==="
+          docker exec ds-test dsconf localhost monitor server || true
+
+          echo "=== Check DS port ==="
+          docker port ds-test || true

@@ -1,0 +1,38 @@
+import pytest
+import sys
+import os
+from unittest.mock import patch
+
+# Add the parent directory to the path so we can import server.py
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Import the tools from server.py
+from server import (
+    list_all_users,
+    search_users_by_name,
+    get_user_details,
+    list_active_users,
+    list_locked_users,
+    search_users_by_attribute,
+)
+
+@pytest.fixture
+def mock_env():
+    """Mock environment variables for testing."""
+    with patch.dict(os.environ, {
+        'LDAP_URL': 'ldap://localhost:3389',
+        'LDAP_BASE_DN': 'dc=test,dc=com',
+        'LDAP_BIND_DN': 'cn=Directory Manager',
+        'LDAP_BIND_PASSWORD': 'TestPassword123'
+    }):
+        yield
+
+@pytest.fixture
+def expected_test_users():
+    """Expected test users for verification."""
+    return [
+        'testuser1',
+        'testuser2',
+        'lockeduser',
+        'contractor'
+    ]
