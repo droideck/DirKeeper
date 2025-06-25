@@ -164,7 +164,13 @@ Create or edit `claude_desktop_config.json` in your Claude Desktop configuration
         "mcp",
         "run",
         "/full/path/to/DirKeeper/server.py"
-      ]
+      ],
+      "env": {
+        "LDAP_URL": "ldap://localhost:389",
+        "LDAP_BASE_DN": "dc=example,dc=com",
+        "LDAP_BIND_DN": "cn=directory manager",
+        "LDAP_BIND_PASSWORD": "your_password"
+      }
     }
   }
 }
