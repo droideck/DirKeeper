@@ -157,7 +157,7 @@ add_base_entries() {
 
     # Create backend if it doesn't exist
     echo "Creating backend for $BASE_DN"
-    docker exec $NAME dsconf localhost backend create --suffix="$BASE_DN" --be-name backend1 --create-entries --create-suffix || true
+    docker exec $NAME dsconf localhost backend create --suffix="$BASE_DN" --be-name userroot --create-entries --create-suffix || true
 
     # Check if base DN exists, if not create it manually
     if ! docker exec $NAME ldapsearch -x -H ldap://$HOSTNAME:3389 -D "cn=Directory Manager" -w $PASSWORD -b "$BASE_DN" -s base > /dev/null 2>&1; then

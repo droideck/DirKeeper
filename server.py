@@ -1,13 +1,15 @@
 from typing import Optional, List, Dict, Any
 import os
 import json
-from mcp.server.fastmcp import FastMCP
-from lib389 import DirSrv
-from lib389.idm.user import nsUserAccounts
-from mcp.types import CallToolResult, TextContent
-from lib389.idm.account import Accounts
 from datetime import datetime
 import logging
+from mcp.server.fastmcp import FastMCP
+from mcp.types import CallToolResult, TextContent
+from lib389 import DirSrv
+from lib389.idm.user import nsUserAccounts
+from lib389.idm.account import Accounts
+from lib389.monitor import Monitor
+from lib389.backend import Backends
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -15,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 # Create an MCP server
 mcp = FastMCP("DirKeeper")
+
 
 def _convert_datetimes_to_strings(data):
     """Recursively convert datetime objects in dicts/lists to ISO strings."""
@@ -627,6 +630,64 @@ def search_users_by_attribute(attribute: str, value: str, limit: int = 50) -> Ca
                 )
             ]
         )
+
+
+@mcp.tool()
+def run_monitor(backend: str = "", suffix: str = "") -> CallToolResult:
+    """Get the Directory Server's monitor information
+
+    Get the backend monitor information if backend/suffix is provided
+
+    Args:
+        backend: the database backend name, like 'userroot'
+        suffix: the database suffix name, like dc=example,dc=com
+
+    Returns:
+        JSON object containing the server's monitor information
+    """
+    try:
+        logger.info("Get the Directory Server monitor information")
+        ds = get_ldap_connection()
+
+        if backend or suffix:
+            # Backend monitor
+            bes = Backends(ds)
+            be = bes.get(backend or suffix)
+            monitor = be.get_monitor()
+        else:
+            # Main monitor
+            monitor = Monitor(ds)
+        data_json = monitor.get_all_attrs_json()
+        result = json.loads(data_json)
+
+        ds.unbind_s()
+        response_data = {
+            "type": "monitor",
+            "item": result
+        }
+
+        return CallToolResult(
+            content=[
+                TextContent(
+                    type="text",
+                    text=json.dumps(response_data, indent=2)
+                )
+            ]
+        )
+
+    except Exception as e:
+        error_message = f"Error accessing the monitor: {str(e)}"
+        logger.error(error_message)
+        return CallToolResult(
+            isError=True,
+            content=[
+                TextContent(
+                    type="text",
+                    text=error_message
+                )
+            ]
+        )
+
 
 if __name__ == "__main__":
     mcp.run()
