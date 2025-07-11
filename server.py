@@ -7,6 +7,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.types import CallToolResult, TextContent
 from lib389 import DirSrv
 from lib389.idm.user import nsUserAccounts
+from lib389.idm.group import Groups
 from lib389.idm.account import Accounts
 from lib389.monitor import Monitor
 from lib389.backend import Backends
@@ -677,6 +678,78 @@ def run_monitor(backend: str = "", suffix: str = "") -> CallToolResult:
 
     except Exception as e:
         error_message = f"Error accessing the monitor: {str(e)}"
+        logger.error(error_message)
+        return CallToolResult(
+            isError=True,
+            content=[
+                TextContent(
+                    type="text",
+                    text=error_message
+                )
+            ]
+        )
+
+@mcp.tool()
+def list_all_groups(limit: int = 50) -> CallToolResult:
+    """List all groups in the directory.
+
+    Args:
+        limit: Maximum number of groups to return (default: 50)
+
+    Returns:
+        JSON containing all group entries
+    """
+    try:
+        logger.info(f"Listing all groups with limit {limit}")
+        config = get_ldap_config()
+        ds = get_ldap_connection()
+
+        groups = Groups(ds, config['base_dn'])
+        group_entries = groups.list()
+
+        results = []
+        count = 0
+
+        for group in group_entries:
+            if count >= limit:
+                break
+
+            try:
+                group_data_json = group.get_all_attrs_json()
+                group_data = json.loads(group_data_json)
+
+                # Convert datetime objects
+                if 'attrs' in group_data and isinstance(group_data['attrs'], dict):
+                    group_data['attrs'] = _convert_datetimes_to_strings(group_data['attrs'])
+
+                results.append(group_data)
+                count += 1
+
+            except Exception as group_error:
+                logger.error(f"Error processing group: {str(group_error)}")
+                continue
+
+        ds.unbind_s()
+
+        response_data = {
+            "type": "group_list",
+            "total_returned": len(results),
+            "limit_applied": limit,
+            "items": results
+        }
+
+        logger.info(f"Successfully returned {len(results)} groups")
+        return CallToolResult(
+            content=[
+                TextContent(
+                    type="text",
+                    text=json.dumps(response_data, indent=2)
+                )
+            ]
+        )
+
+    except Exception as e:
+        error_message = f"Error listing groups: {str(e)}"
         logger.error(error_message)
         return CallToolResult(
             isError=True,

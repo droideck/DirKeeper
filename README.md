@@ -11,11 +11,13 @@ DirKeeper transforms how you interact with your LDAP directory. Instead of writi
 
 **Current Capabilities:**
 - **User Discovery**: Find users by name, email, or any attribute using natural language
+- **Group Discovery**: Find and list groups in the directory
 - **Account Status Monitoring**: Check if users are active, locked, or inactive
 - **Detailed User Information**: Get comprehensive user profiles and account details
 
 **Available Tools:**
 - `list_all_users` - Retrieve all users in the directory
+- `list_all_groups` - Retrieve all groups in the directory
 - `search_users_by_name` - Find users by name, email, or display name
 - `get_user_details` - Get detailed information about a specific user
 - `list_active_users` - Show only active/unlocked user accounts
@@ -134,6 +136,9 @@ uv run mcp-cli cmd --provider=ollama --model=llama3.2 --server dirkeeper --promp
 # Find all users
 uv run mcp-cli cmd --provider=ollama --model=llama3.2 --server dirkeeper --prompt "show me all users"
 
+# Find all groups
+uv run mcp-cli cmd --provider=ollama --model=llama3.2 --server dirkeeper --prompt "list all groups"
+
 # Check account status
 uv run mcp-cli cmd --provider=ollama --model=llama3.2 --server dirkeeper --prompt "which accounts are locked?"
 
@@ -184,16 +189,16 @@ After that, restart your Claude Desktop tool and you'll be able to use the tool 
 
 - **MCP Integration**: Implements Model Context Protocol for secure AI interactions
 - **lib389 Integration**: Uses the official Python library for 389 Directory Server
-- **User-Focused Operations**: Specialized tools for user account management and monitoring
+- **User and Group Operations**: Specialized tools for user account management and group discovery
 - **Account Status Detection**: Advanced status checking including locked, active, and inactive states
 
 ## Project Status & Limitations
 
 > **Note:** This is an experimental project exploring the potential of natural language interaction with 389 Directory Server.
 
-* **Current State & Potential**: While currently in early experimentation, DirKeeper demonstrates the potential to revolutionize LDAP directory management by enabling natural language queries for user account operations. The project focuses specifically on user management tasks - finding users, checking account status, and retrieving user details - making these common administrative tasks more accessible to users without deep LDAP expertise. Future versions may expand to include user creation, modification, group management, and integration with other IdM projects.
+* **Current State & Potential**: While currently in early experimentation, DirKeeper demonstrates the potential to revolutionize LDAP directory management by enabling natural language queries for user and group operations. The project focuses on directory discovery tasks - finding users, listing groups, checking account status, and retrieving detailed information - making these common administrative tasks more accessible to users without deep LDAP expertise. Future versions may expand to include user creation, modification, advanced group management, and integration with other IdM projects.
 
-* **Technical Limitations**: The current implementation requires local 389 Directory Server and Ollama instances, uses STDIO transport for MCP communication, and is currently limited to read-only user operations. User account modifications, password management, and group operations are not yet supported. The lib389 package will be available on official PyPI soon, and the API/functionality may change between versions. Not recommended for production use at this stage. It's just an experiment as of now.
+* **Technical Limitations**: The current implementation requires local 389 Directory Server and Ollama instances, uses STDIO transport for MCP communication, and is currently limited to read-only operations. User account modifications, password management, and advanced group management are not yet supported. The lib389 package will be available on official PyPI soon, and the API/functionality may change between versions. Not recommended for production use at this stage. It's just an experiment as of now.
 
 * **Development Focus**: The project is actively exploring the boundaries of what's possible with natural language processing in directory user management, with a focus on reliability, security, and user experience for common administrative tasks.
 

@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Import the tools from server.py
 from server import (
     list_all_users,
+    list_all_groups,
     search_users_by_name,
     get_user_details,
     list_active_users,
@@ -38,4 +39,12 @@ def expected_test_users():
         'testuser2',
         'lockeduser',
         'contractor'
+    ]
+
+@pytest.fixture
+def expected_test_groups():
+    """Expected test groups for verification."""
+    return [
+        'testgroup1',
+        'testgroup2'
     ]

@@ -6,6 +6,7 @@ This directory contains pytest-based unit tests for DirKeeper's MCP server tools
 
 - `conftest.py` - Shared pytest fixtures and configuration
 - `test_list_all_users.py` - Tests for the list_all_users tool
+- `test_list_all_groups.py` - Tests for the list_all_groups tool
 - `test_search_users_by_name.py` - Tests for the search_users_by_name tool
 - `test_get_user_details.py` - Tests for the get_user_details tool
 - `test_list_active_users.py` - Tests for the list_active_users tool
