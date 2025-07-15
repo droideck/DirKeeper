@@ -141,11 +141,27 @@ jobs:
           gidNumber: 1004
           homeDirectory: /home/contractor
           employeeType: Contractor
+
+          dn: cn=testgroup1,ou=groups,dc=test,dc=com
+          objectClass: top
+          objectClass: groupOfNames
+          objectClass: posixGroup
+          objectClass: nsMemberOf
+          cn: testgroup1
+          gidNumber: 5000
+
+          dn: cn=testgroup2,ou=groups,dc=test,dc=com
+          objectClass: top
+          objectClass: groupOfNames
+          objectClass: posixGroup
+          objectClass: nsMemberOf
+          cn: testgroup2
+          gidNumber: 5001
           EOF
 
-      - name: Verify test data was added
+      - name: Verify test user data was added
         run: |
-          echo "Verifying test data was added..."
+          echo "Verifying test user data was added..."
           docker exec ds-test ldapsearch \
               -H ldap://localhost:3389 \
               -D "cn=Directory Manager" \
@@ -155,6 +171,19 @@ jobs:
               -s sub \
               "(uid=testuser*)" \
               dn uid cn mail
+
+      - name: Verify test group data was added
+        run: |
+          echo "Verifying test group data was added..."
+          docker exec ds-test ldapsearch \
+              -H ldap://localhost:3389 \
+              -D "cn=Directory Manager" \
+              -w TestPassword123 \
+              -x \
+              -b "ou=groups,dc=test,dc=com" \
+              -s sub \
+              "(cn=testgroup*)" \
+              dn gidNumber
 
       - name: Install dependencies
         run: |
