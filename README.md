@@ -36,7 +36,7 @@ Before diving in, ensure you have these components installed:
 
 2. **AI Components**
    - Ollama for local LLM processing
-   - Llama 3.2 model
+   - Qwen 3 model
 
 3. **Development Tools**
    - Python 3.13 or higher
@@ -59,7 +59,7 @@ uv add lib389
 
 # 4. Set up Ollama
 curl -fsSL https://ollama.com/install.sh | sh
-ollama run llama3.2
+ollama run qwen3
 ```
 
 ## Configuration Guide
@@ -128,22 +128,22 @@ Here's how you can interact with your directory using natural language:
 
 Use this command structure with different prompts:
 ```bash
-uv run mcp-cli cmd --provider=ollama --model=llama3.2 --server dirkeeper --prompt "<your_question>"
+uv run mcp-cli cmd --provider=ollama --model=qwen3 --server dirkeeper --prompt "<your_question>"
 ```
 
 **Quick examples:**
 ```bash
 # Find all users
-uv run mcp-cli cmd --provider=ollama --model=llama3.2 --server dirkeeper --prompt "show me all users"
+uv run mcp-cli cmd --provider=ollama --model=qwen3 --server dirkeeper --prompt "show me all users"
 
 # Find all groups
-uv run mcp-cli cmd --provider=ollama --model=llama3.2 --server dirkeeper --prompt "list all groups"
+uv run mcp-cli cmd --provider=ollama --model=qwen3 --server dirkeeper --prompt "list all groups"
 
 # Check account status
-uv run mcp-cli cmd --provider=ollama --model=llama3.2 --server dirkeeper --prompt "which accounts are locked?"
+uv run mcp-cli cmd --provider=ollama --model=qwen3 --server dirkeeper --prompt "which accounts are locked?"
 
 # Search by attribute
-uv run mcp-cli cmd --provider=ollama --model=llama3.2 --server dirkeeper --prompt "find users in the IT department"
+uv run mcp-cli cmd --provider=ollama --model=qwen3 --server dirkeeper --prompt "find users in the IT department"
 ```
 
 ### Alternative Usage (Claude Desktop)
