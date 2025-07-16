@@ -64,7 +64,7 @@ jobs:
           curl -fsSL https://ollama.com/install.sh | docker exec -i mcp sh
           docker exec -d mcp ollama serve
           sleep 10
-          docker exec mcp ollama pull llama3.2
+          docker exec mcp ollama pull qwen3
 
       - name: Install MCP CLI
         run: |
@@ -173,7 +173,7 @@ jobs:
         run: |
           docker exec -w /opt/mcp-cli mcp uv run mcp-cli cmd \
               --provider=ollama \
-              --model=llama3.2 \
+              --model=qwen3 \
               --server dirkeeper \
               --prompt "show me all users in the directory" \
               | tee output
