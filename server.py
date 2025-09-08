@@ -3,6 +3,7 @@ import os
 import json
 from datetime import datetime
 import logging
+import ldap
 from mcp.server.fastmcp import FastMCP
 from mcp.types import CallToolResult, TextContent
 from lib389 import DirSrv
@@ -760,6 +761,203 @@ def list_all_groups(limit: int = 50) -> CallToolResult:
                 )
             ]
         )
+
+
+@mcp.tool()
+def ldap_search(base_dn: str, scope: str = 'SUBTREE', filter: str = '(objectClass=*)',
+                attributes: str = None, attrs_only: bool = False, limit: int = 100) -> CallToolResult:
+    """Perform a general LDAP search with full control over search parameters.
+
+    This tool provides direct access to LDAP search functionality for cases where
+    the specialized search tools (user/group specific) are not sufficient. It allows
+    searching for any type of LDAP entry with complete control over the search scope,
+    filter, and attributes returned.
+
+    Args:
+        base_dn: The base DN to start the search from (e.g., 'dc=example,dc=com' or 'cn=config')
+        scope: Search scope - must be one of: 'BASE', 'ONELEVEL', or 'SUBTREE'
+               - BASE: Search only the base DN entry itself
+               - ONELEVEL: Search only immediate children of the base DN
+               - SUBTREE: Search the entire subtree starting from base DN
+        filter: LDAP search filter (e.g., '(objectClass=*)', '(&(uid=*)(mail=*))', '(cn=admin*)')
+                Default: '(objectClass=*)' to return all entries
+        attributes: Comma-separated list of attributes to return (e.g., 'cn,mail,uid')
+                    Default: None (returns all attributes)
+                    Special values: '*' for all user attributes, '+' for all operational attributes
+        attrs_only: If True, return only attribute names without values (default: False)
+        limit: Maximum number of entries to return (default: 100, max: 1000)
+
+    Returns:
+        JSON containing the search results with full entry details
+    """
+    try:
+        logger.info(f"Performing LDAP search - base: {base_dn}, scope: {scope}, filter: {filter}")
+
+        # Store original scope string for response
+        original_scope = scope.upper()
+
+        # Validate and convert scope
+        scope_map = {
+            'BASE': ldap.SCOPE_BASE,
+            'ONELEVEL': ldap.SCOPE_ONELEVEL,
+            'SUBTREE': ldap.SCOPE_SUBTREE
+        }
+
+        if original_scope not in scope_map:
+            # Return a structured error instead of raising
+            return CallToolResult(
+                isError=True,
+                content=[
+                    TextContent(
+                        type="text",
+                        text=f"Invalid scope '{scope}'. Must be one of: BASE, ONELEVEL, SUBTREE"
+                    )
+                ]
+            )
+
+        search_scope = scope_map[original_scope]
+
+        # Validate limit
+        if limit < 1:
+            limit = 1
+        elif limit > 1000:
+            limit = 1000
+            logger.warning("Limit exceeded maximum of 1000, capping at 1000")
+
+        # Parse attributes
+        attrlist = None
+        if attributes:
+            # Handle special cases and comma-separated list
+            if attributes.strip() in ['*', '+', '*,+', '+,*']:
+                attrlist = attributes.strip().split(',')
+            else:
+                attrlist = [attr.strip() for attr in attributes.split(',') if attr.strip()]
+
+        # Connect to LDAP
+        ds = get_ldap_connection()
+
+        # Perform the search
+        try:
+            # Use search_s which returns a list of (dn, attrs) tuples
+            search_results = ds.search_s(
+                base_dn,
+                search_scope,
+                filter,
+                attrlist=attrlist,
+                attrsonly=1 if attrs_only else 0
+            )
+        except ldap.NO_SUCH_OBJECT:
+            ds.unbind_s()
+            return CallToolResult(
+                isError=True,
+                content=[
+                    TextContent(
+                        type="text",
+                        text=f"Base DN '{base_dn}' does not exist"
+                    )
+                ]
+            )
+        except ldap.INVALID_SYNTAX as e:
+            ds.unbind_s()
+            return CallToolResult(
+                isError=True,
+                content=[
+                    TextContent(
+                        type="text",
+                        text=f"Invalid LDAP filter syntax: {str(e)}"
+                    )
+                ]
+            )
+
+        results = []
+        for item in search_results:
+            if len(results) >= limit:
+                break
+
+            if isinstance(item, tuple) and len(item) == 2:
+                dn, attrs = item
+            else:
+                dn = getattr(item, 'dn', None)
+                attrs = getattr(item, 'data', None)
+
+            if not dn or attrs is None:
+                continue
+
+            attrs_out = {}
+            if hasattr(attrs, 'items'):
+                for attr_name, attr_values in attrs.items():
+                    values_iter = attr_values if isinstance(attr_values, (list, tuple)) else [attr_values]
+                    converted_values = []
+                    for val in values_iter:
+                        if isinstance(val, bytes):
+                            try:
+                                converted_values.append(val.decode('utf-8'))
+                            except UnicodeDecodeError:
+                                import base64
+                                converted_values.append(base64.b64encode(val).decode('ascii'))
+                        else:
+                            converted_values.append(str(val))
+                    attrs_out[attr_name] = converted_values
+
+            results.append({'dn': dn, 'attrs': attrs_out})
+
+        ds.unbind_s()
+
+        response_data = {
+            "type": "ldap_search",
+            "base_dn": base_dn,
+            "scope": original_scope,
+            "filter": filter,
+            "attributes_requested": attributes if attributes else "all",
+            "attrs_only": attrs_only,
+            "total_returned": len(results),
+            "limit_applied": limit,
+            "items": results
+        }
+
+        logger.info(f"LDAP search completed, returned {len(results)} entries")
+        return CallToolResult(
+            content=[
+                TextContent(
+                    type="text",
+                    text=json.dumps(response_data, indent=2)
+                )
+            ]
+        )
+
+    except ldap.LDAPError as e:
+        error_message = f"LDAP search failed: {str(e)}"
+        logger.error(error_message)
+        try:
+            ds.unbind_s()
+        except:
+            pass
+        return CallToolResult(
+            isError=True,
+            content=[
+                TextContent(
+                    type="text",
+                    text=error_message
+                )
+            ]
+        )
+    except Exception as e:
+        error_message = f"Unexpected error during LDAP search: {str(e)}"
+        logger.error(error_message)
+        try:
+            ds.unbind_s()
+        except:
+            pass
+        return CallToolResult(
+            isError=True,
+            content=[
+                TextContent(
+                    type="text",
+                    text=error_message
+                )
+            ]
+        )
+
 
 
 if __name__ == "__main__":

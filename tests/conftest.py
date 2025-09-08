@@ -15,6 +15,7 @@ from server import (
     list_active_users,
     list_locked_users,
     search_users_by_attribute,
+    ldap_search,
 )
 
 @pytest.fixture
