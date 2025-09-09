@@ -80,4 +80,4 @@ def test_list_all_groups_default_limit(mock_env):
     assert response_data["limit_applied"] == 50
     assert len(response_data["items"]) <= 50
 
-    print(f"✓ Default limit applied: returned {len(response_data['items'])} groups (max 50)") 
+    print(f"✓ Default limit applied: returned {len(response_data['items'])} groups (max 50)")
