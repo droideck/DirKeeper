@@ -5,6 +5,7 @@ from datetime import datetime
 import logging
 import ldap
 from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.prompts import base
 from mcp.types import CallToolResult, TextContent
 from lib389 import DirSrv
 from lib389.idm.user import nsUserAccounts
@@ -12,6 +13,7 @@ from lib389.idm.group import Groups
 from lib389.idm.account import Accounts
 from lib389.monitor import Monitor
 from lib389.backend import Backends
+from lib389.config import Config
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -139,6 +141,27 @@ def _get_user_status(ds_instance, user_dn: str, basedn: str) -> Dict[str, Any]:
                 'status_params': {},
                 'calc_time': None
             }
+
+@mcp.prompt(title="Tool Navigator")
+def tool_navigator(goal: str) -> list[base.Message]:
+    return [
+        base.UserMessage("Directory task:"),
+        base.UserMessage(goal),
+        base.AssistantMessage(
+            (
+                "Use the available MCP tools to accomplish the task. Prefer specialized tools first, "
+                "falling back to ldap_search for advanced queries.\n"
+                "- list_active_users / list_locked_users / list_all_users: enumerate users.\n"
+                "- search_users_by_name or search_users_by_attribute: find users.\n"
+                "- get_user_details: retrieve a specific user's details.\n"
+                "- list_all_groups: view groups.\n"
+                "- run_monitor: check server/Backend monitor.\n"
+                "- ldap_search(base_dn, scope, filter, attributes, attrs_only, limit): custom queries.\n"
+                "Resources: config://config-all and config://config-attribute/{attribute} for cn=config.\n"
+                "State which tool you'll call next and why; keep outputs concise."
+            )
+        ),
+    ]
 
 @mcp.tool()
 def list_all_users(limit: int = 50) -> CallToolResult:
@@ -958,6 +981,71 @@ def ldap_search(base_dn: str, scope: str = 'SUBTREE', filter: str = '(objectClas
             ]
         )
 
+
+@mcp.resource("config://config-all")
+def get_cn_config_all_attributes() -> str:
+    """Return all attributes for cn=config as JSON."""
+    ds = None
+    try:
+        ds = get_ldap_connection()
+        config_entry = Config(ds)
+        return config_entry.get_all_attrs_json()
+    except Exception as e:
+        error_payload = {
+            "type": "cn_config_attribute_error",
+            "attribute": "*",
+            "error": str(e),
+        }
+        return json.dumps(error_payload, indent=2)
+    finally:
+        try:
+            if ds is not None:
+                ds.unbind_s()
+        except Exception:
+            pass
+
+@mcp.resource("config://config-attribute/{attribute}")
+def get_cn_config_attribute(attribute: str) -> str:
+    """Get a specific attribute from cn=config as JSON."""
+    ds = None
+    try:
+        ds = get_ldap_connection()
+        config_entry = Config(ds)
+
+        attr_name = attribute.strip()
+
+        # Prefer list-valued API, fall back to single value if available
+        try:
+            values_list = config_entry.get_attr_vals_utf8(attr_name)
+        except Exception:
+            values_list = []
+
+        try:
+            single_value = config_entry.get_attr_val_utf8(attr_name)
+        except Exception:
+            single_value = None
+
+        response = {
+            "type": "cn_config_attribute",
+            "attribute": attr_name,
+            "values": values_list if isinstance(values_list, list) else ([] if values_list is None else [str(values_list)]),
+            "value": single_value,
+        }
+        return json.dumps(response, indent=2)
+
+    except Exception as e:
+        error_payload = {
+            "type": "cn_config_attribute_error",
+            "attribute": attribute,
+            "error": str(e),
+        }
+        return json.dumps(error_payload, indent=2)
+    finally:
+        try:
+            if ds is not None:
+                ds.unbind_s()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
